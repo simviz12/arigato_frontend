@@ -1,32 +1,19 @@
-# React + TypeScript + Vite
+# Frontend del Sistema Arigato
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+Este documento describe la arquitectura y las tecnologías utilizadas en el frontend.
 
-Currently, two official plugins are available:
+## Tecnologías Principales
+- **React + Vite**: Motor principal superrápido para el desarrollo y despliegue.
+- **Tailwind CSS**: Utilizado para todo el sistema de diseño (*Glassmorphism*, diseño responsivo, paneles flotantes y efectos vibrantes).
+- **Zustand**: Manejo de estado global ligero (Ej. `authStore` y `cartStore` para el punto de venta).
+- **React Query (TanStack Query)**: Gestión avanzada de peticiones al servidor, caché, revalidación y sincronización en tiempo real.
+- **React Hook Form + Zod**: Formularios potentes y validados con tipado estricto en el lado del cliente (ej. creación de platos y lotes).
+- **Sonner**: Sistema de notificaciones (*Toasts*) globales.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## Manejo de Errores y Seguridad (Refresh Tokens)
+Se implementó un Interceptor Global utilizando **Axios**:
+- **401 (No autorizado):** Si un *Access Token* expira (15 min), el interceptor invoca silenciosamente a `/api/auth/refresh` enviando la cookie segura. Al recibir el nuevo token, reintenta la petición original. Esto asegura que el cajero en el POS o el administrador nunca pierdan su sesión de forma abrupta.
+- **400 / 500 (Errores globales):** Si hay falta de stock u otro error validado desde el backend, el interceptor lanza un `Toast` visual rojo informando del problema exacto al usuario, evitando fallos silenciosos.
 
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the Oxlint configuration
-
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
-
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
-```
-
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+## Estructura de Rutas y Guards
+Las rutas están protegidas por roles (`RoleGuard`). Además, se configuró una protección en el login para evitar que un usuario ya autenticado vuelva a esa pantalla si retrocede en el navegador, redirigiéndolo automáticamente a su panel correspondiente (Admin o Cajero).

@@ -19,6 +19,8 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
+import { toast } from 'sonner';
+
 // Response Interceptor for handling 401 and refreshing token
 api.interceptors.response.use(
   (response) => response,
@@ -54,6 +56,18 @@ api.interceptors.response.use(
       }
     }
     
+    // Global Error Handling with Sonner
+    if (error.response && error.response.status !== 401) {
+      const errorMsg = error.response.data?.detail || error.response.data?.message || 'Ha ocurrido un error inesperado';
+      toast.error('Error en el sistema', {
+        description: errorMsg,
+      });
+    } else if (!error.response) {
+      toast.error('Error de conexión', {
+        description: 'No se pudo conectar con el servidor',
+      });
+    }
+
     return Promise.reject(error);
   }
 );

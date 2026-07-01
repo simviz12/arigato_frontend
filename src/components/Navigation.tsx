@@ -1,6 +1,9 @@
 import React from 'react';
-import { Package, Truck, LayoutGrid, GlassWater, Activity, ShoppingBag, Wallet, ShoppingCart } from 'lucide-react';
+import { Package, Truck, LayoutGrid, GlassWater, Activity, ShoppingBag, Wallet, ShoppingCart, LogOut } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import api from '../api/axios';
+import { useAuthStore } from '../store/authStore';
+import { AlertBell } from './AlertBell';
 
 export function Navigation() {
   return (
@@ -79,13 +82,32 @@ export function Navigation() {
 
       {/* User Profile Area */}
       <div className="p-4 border-t border-white/5 bg-black/20">
-        <div className="flex items-center gap-3 px-2">
-          <div className="w-8 h-8 rounded-full bg-ari-vermilion/20 border border-ari-vermilion/50 flex items-center justify-center text-ari-vermilion font-bold text-sm">
-            AD
+        <div className="flex justify-between items-center px-2">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-full bg-ari-vermilion/20 border border-ari-vermilion/50 flex items-center justify-center text-ari-vermilion font-bold text-sm">
+              AD
+            </div>
+            <div className="flex flex-col">
+              <span className="text-sm font-semibold text-white">Administrador</span>
+              <span className="text-xs text-ari-mist">admin@arigato.com</span>
+            </div>
           </div>
-          <div className="flex flex-col">
-            <span className="text-sm font-semibold text-white">Administrador</span>
-            <span className="text-xs text-ari-mist">admin@arigato.com</span>
+          
+          <div className="flex items-center gap-1">
+            <AlertBell />
+            <button 
+              onClick={async () => {
+                try {
+                  await api.post('/api/auth/logout');
+                } catch (e) {}
+                useAuthStore.getState().clearAuth();
+                window.location.replace('/login');
+              }}
+              className="p-2 text-ari-mist hover:text-red-400 hover:bg-white/5 rounded-lg transition-colors"
+              title="Cerrar Sesión"
+            >
+              <LogOut size={18} />
+            </button>
           </div>
         </div>
       </div>

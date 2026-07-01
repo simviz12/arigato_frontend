@@ -3,8 +3,9 @@ import { useCartStore, DiscountType } from '../store/useCartStore';
 import { PaymentPanel } from '../components/PaymentPanel';
 import { ReceiptModal } from '../components/ReceiptModal';
 import { useDoubleClick } from '../utils/useDoubleClick';
-import { Search, Plus, Minus, Trash2, ShoppingCart, Tag, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Search, Plus, Minus, Trash2, ShoppingCart, Tag, CheckCircle2, AlertCircle, LogOut } from 'lucide-react';
 import api from '../api/axios';
+import { useAuthStore } from '../store/authStore';
 
 import { useQuery } from '@tanstack/react-query';
 
@@ -31,6 +32,7 @@ export default function POSPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const { role } = useAuthStore();
   
   // Receipt Data State
   const [receiptData, setReceiptData] = useState<any | null>(null);
@@ -111,6 +113,14 @@ export default function POSPage() {
     }
   };
 
+  const handleLogout = async () => {
+    try {
+      await api.post('/api/auth/logout');
+    } catch(e) {}
+    useAuthStore.getState().clearAuth();
+    window.location.replace('/login');
+  };
+
   return (
     <div className="flex h-[calc(100vh-80px)] gap-6 p-6 relative bg-ari-cream/30">
       
@@ -132,6 +142,21 @@ export default function POSPage() {
 
       {/* LEFT PANE (Products) */}
       <div className="flex-[3] flex flex-col gap-6">
+        <div className="flex justify-between items-center bg-white p-4 rounded-2xl shadow-sm border border-ari-line">
+          <div className="flex items-center gap-3">
+             <div className="w-10 h-10 rounded-full bg-ari-indigo/10 flex items-center justify-center font-bold text-ari-indigo">
+                {role === 'ADMIN' ? 'AD' : 'CA'}
+             </div>
+             <div>
+                <h1 className="text-xl font-heading font-extrabold text-ari-indigo m-0 leading-tight">Punto de Venta</h1>
+                <p className="text-xs font-bold text-ari-ash tracking-widest uppercase m-0 mt-1">{role === 'ADMIN' ? 'Administrador' : 'Cajero'}</p>
+             </div>
+          </div>
+          <button onClick={handleLogout} className="flex items-center gap-2 p-2 px-4 text-ari-mist hover:text-red-500 hover:bg-red-50 rounded-xl transition-all font-bold text-sm" title="Cerrar Sesión">
+             Cerrar Sesión <LogOut size={18} />
+          </button>
+        </div>
+
         <div className="relative">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-ari-mist" size={24} />
           <input 
