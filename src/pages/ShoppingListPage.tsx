@@ -1,25 +1,51 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ShoppingCart, AlertTriangle, Download, FileText, Check, Square, CheckSquare } from 'lucide-react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../api/axios';
 
-const MOCK_LOW_STOCK_LIST = [
-  { productId: '1', productName: 'Carne Molida Premium', category: 'Carnes', currentStock: 2500, minStock: 5000, distributorId: 'd1', distributorName: 'Carnicería El Buen Corte', costPerGram: 25.5 },
-  { productId: '2', productName: 'Tomate Chonto', category: 'Vegetales', currentStock: 800, minStock: 2000, distributorId: 'd2', distributorName: 'Verduras La Finca', costPerGram: 4.2 },
-  { productId: '3', productName: 'Queso Cheddar', category: 'Lácteos', currentStock: 1500, minStock: 3000, distributorId: 'NONE', distributorName: 'Sin proveedor registrado', costPerGram: 0 }
-];
-
 export default function ShoppingListPage() {
-  const [list, setList] = useState(MOCK_LOW_STOCK_LIST);
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set(MOCK_LOW_STOCK_LIST.map(i => i.productId)));
+  const queryClient = useQueryClient();
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [isExporting, setIsExporting] = useState(false);
 
   const [purchaseModalOpen, setPurchaseModalOpen] = useState(false);
   const [selectedItem, setSelectedItem] = useState<any>(null);
   const [purchaseAmount, setPurchaseAmount] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [purchasePrice, setPurchasePrice] = useState('');
+
+  const { data: list = [], isLoading } = useQuery({
+    queryKey: ['shopping-list'],
+    queryFn: async () => {
+      const res = await api.get('/api/analytics/best-distributors?lowStock=true');
+      return res.data;
+    }
+  });
+
+  // Automatically select all on initial load if not empty
+  useEffect(() => {
+    if (list.length > 0 && selectedIds.size === 0) {
+      setSelectedIds(new Set(list.map((i: any) => i.productId)));
+    }
+  }, [list]);
+
+  const purchaseMutation = useMutation({
+    mutationFn: async (payload: any) => {
+      await api.post('/api/purchases', payload);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['shopping-list'] });
+      queryClient.invalidateQueries({ queryKey: ['inventory-snapshot'] });
+      setPurchaseModalOpen(false);
+      setSelectedItem(null);
+      setPurchaseAmount('');
+      setPurchasePrice('');
+    }
+  });
 
   const handleQuickPurchase = (item: any) => {
     setSelectedItem(item);
+    setPurchaseAmount('');
+    setPurchasePrice('');
     setPurchaseModalOpen(true);
   };
 
@@ -32,7 +58,7 @@ export default function ShoppingListPage() {
 
   const toggleAll = () => {
     if (selectedIds.size === list.length) setSelectedIds(new Set());
-    else setSelectedIds(new Set(list.map(i => i.productId)));
+    else setSelectedIds(new Set(list.map((i: any) => i.productId)));
   };
 
   const handleDownloadPDF = async () => {
@@ -56,14 +82,26 @@ export default function ShoppingListPage() {
   };
 
   const submitPurchase = () => {
-    setIsSubmitting(true);
-    setTimeout(() => {
-      setList(prev => prev.filter(i => i.productId !== selectedItem.productId));
-      setIsSubmitting(false);
-      setPurchaseModalOpen(false);
-      setSelectedItem(null);
-      setPurchaseAmount('');
-    }, 800);
+    if (!selectedItem || !purchaseAmount || !purchasePrice) return;
+    
+    purchaseMutation.mutate({
+      productId: selectedItem.productId,
+      distributorId: selectedItem.distributorId,
+      quantityGrams: Number(purchaseAmount),
+      totalPricePesos: Number(purchasePrice)
+    });
+  };
+
+  // Pre-fill total price based on suggested cost per gram when quantity changes
+  const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    setPurchaseAmount(val);
+    if (val && selectedItem?.costPerGram > 0) {
+      const total = Number(val) * selectedItem.costPerGram;
+      setPurchasePrice(Math.round(total).toString());
+    } else {
+      setPurchasePrice('');
+    }
   };
 
   return (
@@ -107,7 +145,21 @@ export default function ShoppingListPage() {
             </tr>
           </thead>
           <tbody className="divide-y divide-ari-line text-ari-ink">
-            {list.map(item => (
+            {isLoading ? (
+              <tr>
+                <td colSpan={6} className="p-12 text-center text-ari-mist animate-pulse">
+                  Cargando ingredientes faltantes...
+                </td>
+              </tr>
+            ) : list.length === 0 ? (
+              <tr>
+                <td colSpan={6} className="p-12 text-center text-green-700 bg-green-50/30">
+                  <Check size={48} className="mx-auto mb-3 opacity-80" />
+                  <span className="text-xl font-bold">¡Todo en orden!</span>
+                  <p className="mt-1 text-green-600/80">El inventario está por encima del nivel mínimo.</p>
+                </td>
+              </tr>
+            ) : list.map((item: any) => (
               <tr key={item.productId} className={`transition-colors ${selectedIds.has(item.productId) ? 'bg-ari-indigo/5' : 'hover:bg-ari-cream/10'}`}>
                 <td className="p-4 cursor-pointer" onClick={() => toggleSelection(item.productId)}>
                   {selectedIds.has(item.productId) ? <CheckSquare className="text-ari-indigo" /> : <Square className="text-ari-mist" />}
@@ -130,7 +182,7 @@ export default function ShoppingListPage() {
                   )}
                 </td>
                 <td className="p-4 text-ari-mist font-mono font-medium">
-                  {item.costPerGram > 0 ? `$${item.costPerGram}/g` : '-'}
+                  {item.costPerGram > 0 ? `$${item.costPerGram.toFixed(2)}/g` : '-'}
                 </td>
                 <td className="p-4 text-right">
                   {item.distributorId !== 'NONE' && (
@@ -144,15 +196,6 @@ export default function ShoppingListPage() {
                 </td>
               </tr>
             ))}
-            {list.length === 0 && (
-              <tr>
-                <td colSpan={6} className="p-12 text-center text-green-700 bg-green-50/30">
-                  <Check size={48} className="mx-auto mb-3 opacity-80" />
-                  <span className="text-xl font-bold">¡Todo en orden!</span>
-                  <p className="mt-1 text-green-600/80">El inventario está por encima del nivel mínimo.</p>
-                </td>
-              </tr>
-            )}
           </tbody>
         </table>
       </div>
@@ -173,13 +216,24 @@ export default function ShoppingListPage() {
               <div className="font-bold text-lg text-ari-indigo">{selectedItem.productName}</div>
             </div>
 
-            <div className="mb-6">
+            <div className="mb-4">
               <label className="block text-sm font-semibold text-ari-ash mb-2">Cantidad Comprada (Gramos):</label>
               <input 
                 type="number" 
                 value={purchaseAmount} 
-                onChange={e => setPurchaseAmount(e.target.value)}
+                onChange={handleAmountChange}
                 placeholder="Ej: 5000"
+                className="w-full border border-ari-line rounded-xl p-3 focus:outline-none focus:ring-2 focus:ring-ari-vermilion/50 focus:border-ari-vermilion font-mono"
+              />
+            </div>
+
+            <div className="mb-6">
+              <label className="block text-sm font-semibold text-ari-ash mb-2">Precio Total Pagado (COP):</label>
+              <input 
+                type="number" 
+                value={purchasePrice} 
+                onChange={e => setPurchasePrice(e.target.value)}
+                placeholder="Ej: 15000"
                 className="w-full border border-ari-line rounded-xl p-3 focus:outline-none focus:ring-2 focus:ring-ari-vermilion/50 focus:border-ari-vermilion font-mono"
               />
             </div>
@@ -194,9 +248,9 @@ export default function ShoppingListPage() {
               <button 
                 className="flex-1 py-3 font-semibold text-white bg-ari-vermilion rounded-full hover:bg-red-600 active:scale-95 transition-all shadow-lg btn-hanko disabled:opacity-50 disabled:active:scale-100" 
                 onClick={submitPurchase} 
-                disabled={isSubmitting || !purchaseAmount}
+                disabled={purchaseMutation.isPending || !purchaseAmount || !purchasePrice}
               >
-                {isSubmitting ? 'Procesando...' : 'Guardar Factura'}
+                {purchaseMutation.isPending ? 'Procesando...' : 'Guardar Factura'}
               </button>
             </div>
           </div>

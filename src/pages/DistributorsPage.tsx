@@ -64,17 +64,61 @@ export default function DistributorsPage() {
 
   const toggleExpand = (id: string) => setExpandedId(expandedId === id ? null : id);
 
+  const { data: rankings = [] } = useQuery({
+    queryKey: ['distributor-rankings'],
+    queryFn: async () => {
+      const res = await api.get('/api/analytics/best-distributors/all');
+      return res.data;
+    }
+  });
+
+  const createOfferMutation = useMutation({
+    mutationFn: async (payload: { distributorId: string; primaryProductId: string; offeredQuantityGrams: number; offeredPricePesos: number }) => {
+      return api.post(`/api/distributors/${payload.distributorId}/offers`, {
+        primaryProductId: payload.primaryProductId,
+        offeredQuantityGrams: payload.offeredQuantityGrams,
+        offeredPricePesos: payload.offeredPricePesos
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['distributors'] });
+      queryClient.invalidateQueries({ queryKey: ['distributor-rankings'] });
+    }
+  });
+
+  const createDistributorMutation = useMutation({
+    mutationFn: async (data: z.infer<typeof distributorSchema>) => {
+      const res = await api.post('/api/distributors', {
+        name: data.name,
+        contactPhone: data.contactPhone,
+        contactEmail: data.contactEmail || ''
+      });
+      const dist = res.data;
+      if (data.initialProductId && data.initialQuantityGrams && data.initialPricePesos) {
+        await api.post(`/api/distributors/${dist.id}/offers`, {
+          primaryProductId: data.initialProductId,
+          offeredQuantityGrams: data.initialQuantityGrams,
+          offeredPricePesos: data.initialPricePesos
+        });
+      }
+      return dist;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['distributors'] });
+      queryClient.invalidateQueries({ queryKey: ['distributor-rankings'] });
+      distForm.reset();
+      setIsNewDistributorModalOpen(false);
+      setActiveTab('ranking');
+    }
+  });
+
   const onAddOffer = (distributorId: string, data: z.infer<typeof offerSchema>) => {
-    console.log("Mock offer added:", distributorId, data);
+    createOfferMutation.mutate({ distributorId, ...data });
     offerForm.reset();
   };
 
   const onAddDistributor = (data: z.infer<typeof distributorSchema>) => {
-    console.log("Mock distributor added with product link:", data);
-    distForm.reset();
-    setIsNewDistributorModalOpen(false);
-    // Ideally after creating, redirect to Ranking to see the new addition
-    setActiveTab('ranking');
+    createDistributorMutation.mutate(data);
   };
 
   const handleDownloadFullPDF = async () => {
@@ -101,32 +145,27 @@ export default function DistributorsPage() {
       rankingMap.set(p.id, { productName: p.name, distributors: [] });
     });
 
-    distributors.forEach((d: any) => {
-      if (d.offers && Array.isArray(d.offers)) {
-        d.offers.forEach((o: any) => {
-          if (rankingMap.has(o.primaryProductId)) {
-            const cost = o.offeredQuantityGrams > 0 ? (o.offeredPricePesos / o.offeredQuantityGrams) : 0;
-            rankingMap.get(o.primaryProductId).distributors.push({
-              name: d.name,
-              cost: cost.toFixed(2),
-              rawCost: cost
-            });
-          }
+    rankings.forEach((r: any) => {
+      if (rankingMap.has(r.productId)) {
+        rankingMap.get(r.productId).distributors.push({
+          name: r.distributorName,
+          cost: Number(r.costPerGram).toFixed(2),
+          rawCost: r.costPerGram
         });
       }
     });
 
     const allRankings = Array.from(rankingMap.values())
-      .filter(r => r.distributors.length > 0)
-      .map(r => {
+      .filter((r: any) => r.distributors.length > 0)
+      .map((r: any) => {
         r.distributors.sort((a: any, b: any) => a.rawCost - b.rawCost);
         r.distributors.forEach((dist: any, idx: number) => { dist.rank = idx + 1; });
         return r;
       });
 
     if (!searchTerm) return allRankings;
-    return allRankings.filter(r => r.productName.toLowerCase().includes(searchTerm.toLowerCase()));
-  }, [primaryProducts, distributors, searchTerm]);
+    return allRankings.filter((r: any) => r.productName.toLowerCase().includes(searchTerm.toLowerCase()));
+  }, [primaryProducts, rankings, searchTerm]);
 
   return (
     <div className="p-8 max-w-7xl mx-auto space-y-8 animate-fade-in relative">

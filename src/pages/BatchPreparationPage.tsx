@@ -10,6 +10,7 @@ export default function BatchPreparationPage() {
   const queryClient = useQueryClient();
   const [selectedSubproduct, setSelectedSubproduct] = useState<any>(null);
   const [quantityToPrepare, setQuantityToPrepare] = useState(0);
+  const [error, setError] = useState<string | null>(null);
 
   const { data: subproducts = [], isLoading } = useQuery({
     queryKey: ['subproducts'],
@@ -27,6 +28,14 @@ export default function BatchPreparationPage() {
       queryClient.invalidateQueries({ queryKey: ['subproducts'] });
       setSelectedSubproduct(null);
       setQuantityToPrepare(0);
+      setError(null);
+    },
+    onError: (err: any) => {
+      if (err.response?.data?.detail) {
+        setError(err.response.data.detail);
+      } else {
+        setError('No hay suficiente materia prima en el inventario para preparar esta cantidad.');
+      }
     }
   });
 
@@ -38,9 +47,10 @@ export default function BatchPreparationPage() {
   };
 
   const handleConfirmPrepare = () => {
+    setError(null);
     if (selectedSubproduct && quantityToPrepare > 0) {
-      // The user inputs the number of batches, but the backend expects grams
-      prepareMutation.mutate({ id: selectedSubproduct.id, quantity: quantityToPrepare * selectedSubproduct.totalYieldGrams });
+      const yieldGrams = selectedSubproduct.totalYield?.grams ?? selectedSubproduct.totalYieldGrams ?? 1;
+      prepareMutation.mutate({ id: selectedSubproduct.id, quantity: quantityToPrepare * yieldGrams });
     }
   };
 
@@ -90,8 +100,10 @@ export default function BatchPreparationPage() {
       {/* Grid of Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 relative z-10">
         {subproducts.map((sp: any) => {
-          const ratio = Math.min((sp.currentBatchStockGrams / sp.totalYieldGrams) * 100, 100);
-          const colorClass = getGaugeColor(sp.currentBatchStockGrams, sp.totalYieldGrams);
+          const currentStock = sp.currentBatchStock?.grams ?? sp.currentBatchStockGrams ?? 0;
+          const totalYield = sp.totalYield?.grams ?? sp.totalYieldGrams ?? 1;
+          const ratio = Math.min((currentStock / totalYield) * 100, 100);
+          const colorClass = getGaugeColor(currentStock, totalYield);
           
           return (
             <div 
@@ -114,13 +126,13 @@ export default function BatchPreparationPage() {
               
               <h3 className="text-xl font-heading font-extrabold text-slate-800 mb-1 group-hover:text-ari-indigo transition-colors relative z-10 tracking-tight">{sp.name}</h3>
               <p className="text-xs text-slate-500 mb-8 flex-grow font-medium relative z-10">
-                Rendimiento óptimo: <span className="font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded-md ml-1">{sp.totalYieldGrams}g</span>
+                Rendimiento óptimo: <span className="font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded-md ml-1">{sp.totalYield?.grams ?? sp.totalYieldGrams}g</span>
               </p>
               
               <div className="mb-8 relative z-10 bg-white/50 p-4 rounded-2xl border border-white/60">
                 <div className="flex justify-between text-sm font-extrabold text-slate-700 mb-3">
                   <span className="uppercase tracking-wider text-xs text-slate-500">Stock Actual</span>
-                  <span className="text-ari-indigo text-base">{sp.currentBatchStockGrams}g</span>
+                  <span className="text-ari-indigo text-base">{sp.currentBatchStock?.grams ?? sp.currentBatchStockGrams ?? 0}g</span>
                 </div>
                 <div className="h-2.5 w-full bg-slate-100/80 rounded-full overflow-hidden shadow-inner">
                   <div 
@@ -167,6 +179,15 @@ export default function BatchPreparationPage() {
             </div>
             
             <div className="p-10">
+              {error && (
+                <div className="mb-6 bg-rose-50 border-l-4 border-rose-500 p-4 rounded-r-xl flex gap-3 animate-in fade-in slide-in-from-top-2">
+                  <AlertTriangle className="text-rose-500 shrink-0" size={24} />
+                  <div>
+                    <h3 className="text-rose-800 font-bold text-sm">Error al preparar el lote</h3>
+                    <p className="text-rose-600 text-sm mt-1">{error}</p>
+                  </div>
+                </div>
+              )}
               <div className="mb-10">
                 <label className="block text-sm font-bold text-slate-500 mb-4 uppercase tracking-widest">¿Cuántos lotes preparaste hoy?</label>
                 <div className="transform origin-left transition-all hover:scale-[1.02]">

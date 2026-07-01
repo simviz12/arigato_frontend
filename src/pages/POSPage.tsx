@@ -72,10 +72,12 @@ export default function POSPage() {
 
     try {
       const payload = {
-        paymentMethod: paymentData.method,
+        cashierId: 'System',
         discountPesos: getDiscountAmount(),
+        cashAmountPesos: paymentData.method === 'CASH' ? paymentData.received : (paymentData.method === 'MIXED' ? paymentData.cash : 0),
+        nequiAmountPesos: paymentData.method === 'NEQUI' ? getFinalTotal() : (paymentData.method === 'MIXED' ? paymentData.nequi : 0),
         lines: cartLines.map(line => ({
-          finalProductId: line.productId.length > 10 ? line.productId : '00000000-0000-0000-0000-000000000000',
+          finalProductId: line.productId,
           quantity: line.quantity
         }))
       };
